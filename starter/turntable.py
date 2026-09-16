@@ -20,6 +20,7 @@ def render_turntable(
     up=((0.0, 1.0, 0.0),),
     at=((0.0, 0.0, 0.0),),
     fov=60.0,
+    flat=False,
     lights=None,
     light_follows_camera=True,
     point_radius=0.01,
@@ -27,11 +28,19 @@ def render_turntable(
     device=None,
     progress=True,
 ):
+# The device tells us whether we are rendering with GPU or CPU. The rendering will
+    # be *much* faster if you have a CUDA-enabled NVIDIA GPU. However, your code will
+    # still run fine on a CPU.
+    # The default is to run on CPU, so if you do not have a GPU, you do not need to
+    # worry about specifying the device in all of these functions.
     if device is None:
         device = get_device()
     obj = obj.to(device)
 
+    # determine if object is pointcloud
     is_pc = isinstance(obj, pytorch3d.structures.Pointclouds)
+
+    # get renderer
     if is_pc:
         renderer = get_points_renderer(
             image_size=image_size,
@@ -40,31 +49,57 @@ def render_turntable(
             device=device,
         )
     else:
-        renderer = get_mesh_renderer(image_size=image_size, device=device)
+        renderer = get_mesh_renderer(
+            image_size=image_size, 
+            device=device,
+            flat=flat
+        )
 
+    # generate azimuth angles for full 360 animation
     azims = torch.linspace(azim_start, azim_start + 360.0, n_frames + 1)[:-1]
+
+    # render image frames
     frames = []
     for azim in tqdm(azims, desc="turntable", disable=not progress):
+        # get R, T for azimuth
         R, T = pytorch3d.renderer.look_at_view_transform(
             dist=dist, elev=elev, azim=float(azim), up=up, at=at
         )
+
+        # prep camera with R, T
         cameras = pytorch3d.renderer.FoVPerspectiveCameras(
             R=R, T=T, fov=fov, device=device
         )
+
         if is_pc:
+            # if pointcloud no lights
             rend = renderer(obj, cameras=cameras)
         else:
+            # set up lights
             if lights is not None:
                 frame_lights = lights
             elif light_follows_camera:
-                frame_lights = pytorch3d.renderer.PointLights(
-                    location=cameras.get_camera_center(), device=device
-                )
+                if flat:
+                    frame_lights = pytorch3d.renderer.DirectionalLights(
+                        direction=cameras.get_camera_center() + torch.tensor([[1.0,1.0,0.0]]),
+                        device=device
+                    )
+                else:
+                    frame_lights = pytorch3d.renderer.PointLights(
+                        location=cameras.get_camera_center(), device=device
+                    )
             else:
-                frame_lights = pytorch3d.renderer.PointLights(
-                    location=[[0.0, 0.0, -3.0]], device=device
-                )
+                if flat:
+                    frame_lights = pytorch3d.renderer.DirectionalLights(
+                        device=device
+                    )
+                else:
+                    frame_lights = pytorch3d.renderer.PointLights(
+                        location=[[0.0, 0.0, -3.0]], device=device
+                    )
+            # if mesh, render with light
             rend = renderer(obj, cameras=cameras, lights=frame_lights)
+        # stack image frames for gif making
         frames.append(to_uint8(rend[0, ..., :3]))
     return frames
 

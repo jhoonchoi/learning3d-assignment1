@@ -14,6 +14,10 @@ from tqdm.auto import tqdm
 
 from starter.utils import get_device, get_mesh_renderer
 
+def dolly_zoom_distance(fov, width):
+    fov_rad = torch.deg2rad(fov)
+    d = width / (2 * torch.tan(fov_rad/2))
+    return d
 
 def dolly_zoom(
     image_size=256,
@@ -34,8 +38,8 @@ def dolly_zoom(
 
     renders = []
     for fov in tqdm(fovs):
-        distance = 3  # TODO: change this.
-        T = [[0, 0, 3]]  # TODO: Change this.
+        distance = dolly_zoom_distance(fov, width=5)
+        T = [[0, 0, distance]]
         cameras = pytorch3d.renderer.FoVPerspectiveCameras(fov=fov, T=T, device=device)
         rend = renderer(mesh, cameras=cameras, lights=lights)
         rend = rend[0, ..., :3].cpu().numpy()  # (N, H, W, 3)
@@ -47,7 +51,7 @@ def dolly_zoom(
         draw = ImageDraw.Draw(image)
         draw.text((20, 20), f"fov: {fovs[i]:.2f}", fill=(255, 0, 0))
         images.append(np.array(image))
-    imageio.mimsave(output_file, images, duration=duration)
+    imageio.mimsave(output_file, images, duration=duration, loop=0)
 
 
 if __name__ == "__main__":

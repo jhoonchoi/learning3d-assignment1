@@ -8,6 +8,7 @@ from pytorch3d.renderer import (
     PointsRenderer,
     PointsRasterizer,
     HardPhongShader,
+    HardFlatShader,
 )
 from pytorch3d.io import load_obj
 
@@ -52,7 +53,7 @@ def get_points_renderer(
     return renderer
 
 
-def get_mesh_renderer(image_size=512, lights=None, device=None):
+def get_mesh_renderer(image_size=512, lights=None, device=None, flat=False):
     """
     Returns a Pytorch3D Mesh Renderer.
 
@@ -70,10 +71,17 @@ def get_mesh_renderer(image_size=512, lights=None, device=None):
     raster_settings = RasterizationSettings(
         image_size=image_size, blur_radius=0.0, faces_per_pixel=1,
     )
-    renderer = MeshRenderer(
-        rasterizer=MeshRasterizer(raster_settings=raster_settings),
-        shader=HardPhongShader(device=device, lights=lights),
-    )
+    # prep shader 
+    if flat:
+        renderer = MeshRenderer(
+            rasterizer=MeshRasterizer(raster_settings=raster_settings),
+            shader=HardFlatShader(device=device, lights=lights),
+        )
+    else:
+        renderer = MeshRenderer(
+            rasterizer=MeshRasterizer(raster_settings=raster_settings),
+            shader=HardPhongShader(device=device, lights=lights),
+        )
     return renderer
 
 
